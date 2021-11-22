@@ -1,0 +1,16 @@
+# ESP
+build*
+sdkconfig*
+
+# Altium
+History
+*.PrjPcbStructure
+__Previews
+Project Outputs*
+Project Logs*
+
+# Matlab files
+*.asv
+
+# VSCode
+.vscode/

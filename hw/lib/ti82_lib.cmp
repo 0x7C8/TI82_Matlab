@@ -1,0 +1,50 @@
+Component Name : ESP32_DevKitC_V4
+
+Part Count : 2
+
+Part : *
+     Pins - (Normal) : 0
+          Hidden Pins : 
+
+Part : *
+     Pins - (Normal) : 38
+          VDD33          1              Passive
+          EN             2              Passive
+          SENSOR_VP      3              Passive
+          SENSOR_VN      4              Passive
+          IO34           5              Passive
+          IO35           6              Passive
+          IO32           7              Passive
+          IO33           8              Passive
+          IO25           9              Passive
+          IO26           10             Passive
+          IO27           11             Passive
+          IO14           12             Passive
+          IO12           13             Passive
+          GND            14             Passive
+          IO13           15             Passive
+          SD2            16             Passive
+          SD3            17             Passive
+          CMD            18             Passive
+          EXT_5V         19             Passive
+          CLK            22             Passive
+          SD0            23             Passive
+          SD1            24             Passive
+          IO15           25             Passive
+          IO2            26             Passive
+          IO0            27             Passive
+          IO4            28             Passive
+          IO16           29             Passive
+          IO17           30             Passive
+          IO5            31             Passive
+          IO18           32             Passive
+          IO19           33             Passive
+          GND            34             Passive
+          IO21           35             Passive
+          RXD0           36             Passive
+          TXD0           37             Passive
+          IO22           38             Passive
+          IO23           39             Passive
+          GND            40             Passive
+          Hidden Pins : 
+

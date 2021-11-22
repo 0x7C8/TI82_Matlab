@@ -1,0 +1,36 @@
+
+
+
+p.13 : Commands
+
+p.14 - Try test mode select (CHE)
+
+p.21 - Oscillation freq. 
+
+p.22 - EXP = 0, M/S = 1
+
+
+
+TODO:
+[] CREATE TEST BOARD!
+[] Test Ribbon cable for soldering temperature
+[] Analyse D3 and its orientation
+[] Find out resistor value between OSCx
+[] Button PCB layout
+[] Scan PCB and measure size
+[] Check where in the case WROOM32 fits
+
+PCB:
+* Antenna window
+* Board 72.3 x 113.3 mm
+* USB - UART bridge
+
+Altium components:
+[] 44 exposed pins (0.4x2.8 mm pads, 0.3 mm gap)
+[] buttons
+[] 4-wire 2.5 mm jack with USB driver
+
+
+
+
+
