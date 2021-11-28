@@ -12,7 +12,6 @@ p.22 - EXP = 0, M/S = 1
 
 
 TODO:
-[] CREATE TEST BOARD!
 [] Test Ribbon cable for soldering temperature
 [] Analyse D3 and its orientation
 [] Find out resistor value between OSCx

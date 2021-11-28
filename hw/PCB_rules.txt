@@ -1,0 +1,7 @@
+
+Via hole	0.7 mm
+Via pad		1.5 mm
+Minimum clearance 0.2 mm
+Recommended clearance >= 0.2 mm
+Minimum traces		0.3 mm
+Recommended traces 	0.5
