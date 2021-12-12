@@ -143,6 +143,10 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [GeneratedDocument1]
+DocumentPath=Project Outputs for TI82_matlab\Design Rule Check - TI82_matlab.html
+DItemRevisionGUID=
+
+[GeneratedDocument2]
 DocumentPath=..\lib\ti82_lib.cmp
 DItemRevisionGUID=
 
