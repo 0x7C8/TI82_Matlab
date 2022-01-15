@@ -1,0 +1,28 @@
+menu "*Blinky WiFi Configuration"
+
+	choice BM_WIFI_MODE
+		prompt "WiFi Mode"
+		default BM_WIFI_AP
+		help
+			Select station or AP mode for WiFi.
+
+		config BM_WIFI_STA
+			bool "WiFi station mode"
+		
+		config BM_WIFI_AP
+			bool "WiFi access point mode"
+	endchoice
+
+	config BM_WIFI_SSID
+		string "WiFi SSID"
+		default "GR8"
+		help
+			WiFi SSID to connect to.
+	
+	config BM_WIFI_PASSWORD
+		string "WiFi Password"
+		default ""
+		help
+			WiFi password to use.
+	
+endmenu

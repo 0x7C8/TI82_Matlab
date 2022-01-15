@@ -1,0 +1,38 @@
+menu "Blinky Configuration"
+    config LED_DRIVE
+        int "GPIO: LED SPI Data"
+        default 4
+        help
+            Set the GPIO number used for sending data to LEDs through SPI.
+
+    config LED_CLK
+        int "GPIO: LED SPI Clock"
+        default 15
+        help
+            Set the GPIO number used for sending clock signal to LEDs.
+
+    config HALL_SENSOR
+        int "GPIO: Hall Sensor"
+        default 16
+        help
+            Set the GPIO number used for Hall Sensor.
+
+    config DEVICE_SPI_CLOCK
+        int "LED SPI Clock (Hz)"
+        default 1000000
+        help
+            Clock speed for LED communication 
+
+    config STRIP_LED_NUMBER
+        int "Number of LEDS in a strip"
+        default 16
+        help
+            A single RGB strip contains several LEDs.
+
+    config CIRC_RESOLUTION
+        int "Circular Resolution"
+        default 100
+        help
+            The number of visible pixels in a single circle.
+    
+endmenu
