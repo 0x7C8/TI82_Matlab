@@ -1,5 +1,5 @@
 /** @file mcp23s17.h
- * @brief Header file for MCP23S17 macros
+ * @brief Header file for MCP23S17 macros.
  *
  * For more information about the registers,
  * read MCP23S17's datasheet.

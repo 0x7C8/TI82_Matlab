@@ -62,7 +62,13 @@ spi_device_handle_t spi_handle;
 spi_transaction_t trans_desc;
 char data[3];
 
+void expander_spi_init(void);
+void mcp23s17_init(void);
 void mcp23s17_write_to_reg(char reg_addr, char val);
+void t6k04_init(void);
+void t6k04_onoff(char onoff);
+void t6k04_write(char disp_data);
+void t6k04_set_row(char row);
 
 // Pin interrupt (Keyboard)
 static void gpio_isr_handler(void* arg)
@@ -77,7 +83,7 @@ static void gpio_isr_handler(void* arg)
     gpio_intr_disable(KEYBOARD_COL4);
 }
 
-void keyboard_isr_init()
+void keyboard_isr_init(void)
 {
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_POSEDGE,
@@ -95,7 +101,7 @@ void keyboard_isr_init()
     gpio_isr_handler_add(KEYBOARD_COL4, gpio_isr_handler, (void*) KEYBOARD_COL4);
 }
 
-void expander_spi_init()
+void expander_spi_init(void)
 {
     ESP_LOGI(TAG1, "Setup Expander SPI.");
 
@@ -220,7 +226,23 @@ void keyboard_press(void * pvParameters){
     }
 }
 
-void t6k04_init(char disp_data)
+void display_driver(void * pvParameters)
+{
+    t6k04_init();
+    char row = 32;
+    t6k04_set_row(row);
+    while(true)
+    {
+        ESP_LOGI(TAG1, "LOL");
+        t6k04_write(0xaa);
+        vTaskDelay(1000 / portTICK_RATE_MS);
+    }
+}
+
+
+/** @brief	Initialise the display comminication.
+ */
+void t6k04_init(void)
 {
     // Configure display communication pins
     gpio_config_t io_conf = {
@@ -231,13 +253,70 @@ void t6k04_init(char disp_data)
         .pull_up_en = 0
     };
     gpio_config(&io_conf);
+
+    gpio_set_level(DISPLAY_RST, 1);
+    gpio_set_level(DISPLAY_STB, 1);
+    gpio_set_level(DISPLAY_CE, 0);
+
+    t6k04_onoff(1);
+    // SCE:
+    // Contrast (0 to 63)
+    mcp23s17_write_to_reg(GPIOB, (1 << 7) | (1 << 6) | 32);
+    gpio_set_level(DISPLAY_CE, 0);
+    gpio_set_level(DISPLAY_DI, 0);
+    gpio_set_level(DISPLAY_WR, 0);
+    vTaskDelay(10 / portTICK_RATE_MS);  // TODO: Change to reasonable time
+    gpio_set_level(DISPLAY_CE, 1);
+
+    // UDE:
+    // DB2 = 1
+    // Counter Select (DB1): X = 0
+    // Mode Select (DB0): Down = 0
+    mcp23s17_write_to_reg(GPIOB, (1 << 2) | (0 << 1) | (0 << 0));
+    gpio_set_level(DISPLAY_CE, 0);
+    gpio_set_level(DISPLAY_DI, 0);
+    gpio_set_level(DISPLAY_WR, 0);
+    vTaskDelay(10 / portTICK_RATE_MS);  // TODO: Change to reasonable time
+    gpio_set_level(DISPLAY_CE, 1);
 }
 
+/** @brief	Turn on/off T6K04 display. (DPE)
+ *	@param	onoff ON = 1 , OFF = 0.
+ */
+void t6k04_onoff(char onoff)
+{
+    mcp23s17_write_to_reg(GPIOB, (1 << 1) | (onoff << 0));
+    gpio_set_level(DISPLAY_CE, 0);
+    gpio_set_level(DISPLAY_DI, 0);
+    gpio_set_level(DISPLAY_WR, 0);
+    vTaskDelay(10 / portTICK_RATE_MS);  // TODO: Change to reasonable time
+    gpio_set_level(DISPLAY_CE, 1);
+}
+
+/** @brief	Write to T6K04 display. (DAWR)
+ *	@param	disp_data Data.
+ */
 void t6k04_write(char disp_data)
 {
-    mcp23s17_write_to_reg(GPIOB, 0x00);
-    vTaskDelay(5 / portTICK_RATE_MS);
-    gpio_set_level(KEYBOARD_ROW1, 1);
+    mcp23s17_write_to_reg(GPIOB, disp_data);
+    gpio_set_level(DISPLAY_CE, 0);
+    gpio_set_level(DISPLAY_DI, 1);
+    gpio_set_level(DISPLAY_WR, 0);
+    vTaskDelay(10 / portTICK_RATE_MS);  // TODO: Change to reasonable time
+    gpio_set_level(DISPLAY_CE, 1);
+}
+
+/** @brief	Set T6K04 display's row. (SXE)
+ *	@param	row Row (Range: 0 to 63).
+ */
+void t6k04_set_row(char row)
+{
+    mcp23s17_write_to_reg(GPIOB, (1 << 7) | row);
+    gpio_set_level(DISPLAY_CE, 0);
+    gpio_set_level(DISPLAY_DI, 0);
+    gpio_set_level(DISPLAY_WR, 0);
+    vTaskDelay(10 / portTICK_RATE_MS);  // TODO: Change to reasonable time
+    gpio_set_level(DISPLAY_CE, 1);
 }
 
 /** @brief	Initializes MCP23S17 by reseting and
@@ -280,6 +359,6 @@ void app_main(void)
 
     xTaskCreatePinnedToCore(keyboard_driver, "keyboard_driver", 4096, NULL, 10, NULL, 1);
     xTaskCreatePinnedToCore(keyboard_press, "keyboard_press", 4096, NULL, 10, NULL, 1);
-    // TODO: xTaskCreatePinnedToCore(keyboard_press, "display_driver", 4096, NULL, 10, NULL, 1);
+    xTaskCreatePinnedToCore(display_driver, "display_driver", 4096, NULL, 10, NULL, 1);
     // TODO: WiFi task;
 }
