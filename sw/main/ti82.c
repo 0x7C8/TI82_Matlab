@@ -284,13 +284,14 @@ void keyboard_press(void * pvParameters){
 void display_driver(void * pvParameters)
 {
     t6k04_init();
+    // display_clear();
     char row = 4;
     while(true)
     {
         int msg_size = strlen(msg);
         for (int xad = 0; xad <= 7; xad++){
-            display_set_x(row+xad);
             for(int page = 0; page <= msg_size; page++){
+                display_set_x(row+xad);
                 display_set_y(page);
                 display_word((int) msg[page], xad);
             }
@@ -340,7 +341,7 @@ void t6k04_init(void)
     display_instruction((char) ((1 << 4) | (1 << 2) | (1 << 1) | (1 << 0)));
     display_instruction((char) ((1 << 3) | (1 << 1) | (1 << 0)));
     
-    display_contrast(32);
+    display_contrast(54);
 }
 
 /** @brief	Turn on/off display. (DPE)
@@ -424,7 +425,15 @@ void display_data(char disp_data)
  */
 void display_clear(void)
 {
-    // TODO
+    for (int xad = 0; xad <= display_res[1]; xad++) {
+        for (int page = 0; page < 22; page++){
+            display_counter(1, 1);
+            display_set_x(xad);
+            display_counter(0, 1);
+            display_set_y(page);
+            display_data(0x00);
+        }
+    }
 }
 
 /** @brief	Initializes MCP23S17 by reseting and
