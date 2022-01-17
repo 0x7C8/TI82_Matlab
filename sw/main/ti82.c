@@ -1,6 +1,6 @@
 /*
     TI82_Matlab
-    Edited 11 January 2022 by Georgij
+    Edited 17 January 2022 by Georgij
 */
 
 #include <string.h>
@@ -27,34 +27,10 @@
 #include "sys/param.h"
 
 #include "mcp23s17.h"
-
-// Expander SPI
-#define EXPANDER_CS     26 // CONFIG_EXPANDER_CS
-#define EXPANDER_SCK    27 // CONFIG_EXPANDER_SCK
-#define EXPANDER_DATA   14 // CONFIG_EXPANDER_DATA
-// Keyboard
-#define KEYBOARD_COL0   36 // CONFIG_KEYBOARD_COL0
-#define KEYBOARD_COL1   13 // CONFIG_KEYBOARD_COL1
-#define KEYBOARD_COL2   34 // CONFIG_KEYBOARD_COL2 NOTE: PATCHED to GPIO34
-#define KEYBOARD_COL3   22 // CONFIG_KEYBOARD_COL3
-#define KEYBOARD_COL4   23 // CONFIG_KEYBOARD_COL4
-#define KEYBOARD_ROW0   33 // CONFIG_KEYBOARD_ROW0
-#define KEYBOARD_ROW1   25 // CONFIG_KEYBOARD_ROW1
-#define KEYBIARD_ON     32
-// Keyboard Column pin mask
-#define KEYBOARD_COLS  ((1ULL<<KEYBOARD_COL0) | (1ULL<<KEYBOARD_COL1) | (1ULL<<KEYBOARD_COL2) | (1ULL<<KEYBOARD_COL3) | (1ULL<<KEYBOARD_COL4))
-// Display IO
-#define DISPLAY_RST     21 // Reset
-#define DISPLAY_CE      19 // Chip Enable
-#define DISPLAY_WR      18 // Write
-#define DISPLAY_DI      17 // Data/Instruction
-#define DISPLAY_STB     16 // Standby
-// Display communication pin mask
-#define DISPLAY_PINS  ((1ULL<<DISPLAY_RST) | (1ULL<<DISPLAY_CE) | (1ULL<<DISPLAY_WR) | (1ULL<<DISPLAY_DI) | (1ULL<<DISPLAY_STB))
+#include "pcb.h"
 
 #define DISPLAY_PERIOD  10 // (ms)
 #define EXPANDER_WRITE_DELAY_US 100 // TODO: Optimize this
-#define BAT_ADC         35      
 
 // static const char *TAG0 = "CORE0";
 static const char *TAG1 = "CORE1";
@@ -68,10 +44,14 @@ void expander_spi_init(void);
 void mcp23s17_init(void);
 void mcp23s17_write_to_reg(char reg_addr, char val);
 void t6k04_init(void);
-void t6k04_onoff(char onoff);
-void t6k04_write(char disp_data);
-void t6k04_instruction(char disp_instr);
-void t6k04_set_row(char row);
+void display_onoff(char onoff);
+void display_counter(char xy, char updown);
+void display_set_y(char y);
+void display_set_z(char z);
+void display_set_x(char x);
+void display_contrast(char contrast);
+void display_data(char disp_data);
+void display_instruction(char disp_instr);
 
 // Pin interrupt (Keyboard)
 static void gpio_isr_handler(void* arg)
@@ -233,11 +213,11 @@ void display_driver(void * pvParameters)
 {
     t6k04_init();
     char row = 4;
-    t6k04_set_row(row);
+    display_set_x(row);
     while(true)
     {
         ESP_LOGI(TAG1, "LOL");
-        t6k04_write(0xaa);
+        display_data(0xaa);
         vTaskDelay(1000 / portTICK_RATE_MS);
     }
 }
@@ -261,42 +241,73 @@ void t6k04_init(void)
 
     // 86E:
     // Word Length: 8 bits = 1, 6 bits = 0
-    t6k04_instruction((char) (1 << 0));
+    display_instruction((char) (1 << 0));
 
-    // UDE:
-    // Counter Select (DB1): Y = 1, X = 0 
-    // Mode Select (DB0): Up = 1, Down = 0
-    t6k04_instruction((char) ((1 << 2) | (0 << 1) | (1 << 0)));
-
-    // SZE:
-    // Z-address Set (0 to 63)
-    t6k04_instruction((char) ((1 << 6) | 0));
-    
-    t6k04_onoff(1);
+    display_counter(0, 1);
+    display_set_z(0);
+    display_onoff(1);
 
     // OPA1 and OPA2:
     // Op-amp Control 1 and 2
-    t6k04_instruction((char) ((1 << 4) | (1 << 2) | (1 << 1) | (1 << 0)));
-    t6k04_instruction((char) ((1 << 3) | (1 << 1) | (1 << 0)));
+    display_instruction((char) ((1 << 4) | (1 << 2) | (1 << 1) | (1 << 0)));
+    display_instruction((char) ((1 << 3) | (1 << 1) | (1 << 0)));
     
-    // SCE:
-    // Contrast (0 to 63)
-    char contrast = 52;
-    t6k04_instruction((char) ((1 << 7) | (1 << 6) | contrast));
+    display_contrast(32);
 }
 
-/** @brief	Turn on/off T6K04 display. (DPE)
- *	@param	onoff ON = 1 , OFF = 0.
+/** @brief	Turn on/off display. (DPE)
+ *	@param	onoff ON = 1 , OFF = 0
  */
-void t6k04_onoff(char onoff)
+void display_onoff(char onoff)
 {
-    t6k04_instruction((1 << 1) | (onoff << 0));
+    display_instruction((char) ((1 << 1) | (onoff << 0)));
+}
+
+/** @brief	Display counter and up/down mode. (UDE)
+ *	@param	xy      X = 0 , Y = 1
+ *  @param	updown  Down = 0 , Up = 1
+ */
+void display_counter(char xy, char updown)
+{
+    display_instruction((char) ((1 << 2) | (xy << 1) | (updown << 0)));
+}
+
+/** @brief	Set display's Y-address. (SYE)
+ *	@param	y Y-address (Range: 0 to 21).
+ */
+void display_set_y(char y)
+{
+    display_instruction((char) ((1 << 5) | y));
+}
+
+/** @brief	Set display's Z-address. (SZE)
+ *	@param	z Z-address (Range: 0 to 63).
+ */
+void display_set_z(char z)
+{
+    display_instruction((char) ((1 << 6) | z));
+}
+
+/** @brief	Set display's X-address. (SXE)
+ *	@param	x X-address (Range: 0 to 63).
+ */
+void display_set_x(char x)
+{
+    display_instruction((char) ((1 << 7) | x));
+}
+
+/** @brief	Set display's contrast. (SCE)
+ *	@param	contrast Contrast (0 to 63)
+ */
+void display_contrast(char contrast)
+{
+    display_instruction((char) ((1 << 7) | (1 << 6) | contrast));
 }
 
 /** @brief	Send instruction to T6K04 display.
  *	@param	disp_instr Instruction.
  */
-void t6k04_instruction(char disp_instr)
+void display_instruction(char disp_instr)
 {
     gpio_set_level(DISPLAY_DI, 0);
     mcp23s17_write_to_reg(GPIOB, disp_instr);
@@ -310,7 +321,7 @@ void t6k04_instruction(char disp_instr)
 /** @brief	Write data to T6K04 display. (DAWR)
  *	@param	disp_data Data.
  */
-void t6k04_write(char disp_data)
+void display_data(char disp_data)
 {
     gpio_set_level(DISPLAY_DI, 1);
     mcp23s17_write_to_reg(GPIOB, disp_data);
@@ -319,14 +330,6 @@ void t6k04_write(char disp_data)
     gpio_set_level(DISPLAY_CE, 0);
     ets_delay_us(1);
     gpio_set_level(DISPLAY_CE, 1);
-}
-
-/** @brief	Set T6K04 display's row. (SXE)
- *	@param	row Row (Range: 0 to 63).
- */
-void t6k04_set_row(char row)
-{
-    t6k04_instruction((char) ((1 << 7) | row));
 }
 
 /** @brief	Initializes MCP23S17 by reseting and
