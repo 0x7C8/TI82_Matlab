@@ -53,6 +53,7 @@
 #define DISPLAY_PINS  ((1ULL<<DISPLAY_RST) | (1ULL<<DISPLAY_CE) | (1ULL<<DISPLAY_WR) | (1ULL<<DISPLAY_DI) | (1ULL<<DISPLAY_STB))
 
 #define DISPLAY_PERIOD  10 // (ms)
+#define EXPANDER_WRITE_DELAY_US 100 // TODO: Optimize this
 #define BAT_ADC         35      
 
 // static const char *TAG0 = "CORE0";
@@ -255,21 +256,12 @@ void t6k04_init(void)
     };
     gpio_config(&io_conf);
 
-    gpio_set_level(DISPLAY_RST, 0);
-    vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS);  // TODO: Change to reasonable time
     gpio_set_level(DISPLAY_RST, 1);
     gpio_set_level(DISPLAY_STB, 1);
 
     // 86E:
     // Word Length: 8 bits = 1, 6 bits = 0
     t6k04_instruction((char) (1 << 0));
-    
-    t6k04_onoff(1);
-    
-    // SCE:
-    // Contrast (0 to 63)
-    char contrast = 32;
-    t6k04_instruction((char) ((1 << 7) | (1 << 6) | contrast));
 
     // UDE:
     // Counter Select (DB1): Y = 1, X = 0 
@@ -278,7 +270,19 @@ void t6k04_init(void)
 
     // SZE:
     // Z-address Set (0 to 63)
-    t6k04_instruction((char) ((1 << 6) | 8));
+    t6k04_instruction((char) ((1 << 6) | 0));
+    
+    t6k04_onoff(1);
+
+    // OPA1 and OPA2:
+    // Op-amp Control 1 and 2
+    t6k04_instruction((char) ((1 << 4) | (1 << 2) | (1 << 1) | (1 << 0)));
+    t6k04_instruction((char) ((1 << 3) | (1 << 1) | (1 << 0)));
+    
+    // SCE:
+    // Contrast (0 to 63)
+    char contrast = 52;
+    t6k04_instruction((char) ((1 << 7) | (1 << 6) | contrast));
 }
 
 /** @brief	Turn on/off T6K04 display. (DPE)
@@ -295,12 +299,11 @@ void t6k04_onoff(char onoff)
 void t6k04_instruction(char disp_instr)
 {
     gpio_set_level(DISPLAY_DI, 0);
-    gpio_set_level(DISPLAY_WR, 0);
-    vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS);  // TODO: Change to reasonable time
-    gpio_set_level(DISPLAY_CE, 0);
-    vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS);  // TODO: Change to reasonable time
     mcp23s17_write_to_reg(GPIOB, disp_instr);
-    vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS);  // TODO: Change to reasonable time
+    gpio_set_level(DISPLAY_WR, 0);
+    ets_delay_us(1);
+    gpio_set_level(DISPLAY_CE, 0);
+    ets_delay_us(1);
     gpio_set_level(DISPLAY_CE, 1);
 }
 
@@ -310,12 +313,11 @@ void t6k04_instruction(char disp_instr)
 void t6k04_write(char disp_data)
 {
     gpio_set_level(DISPLAY_DI, 1);
-    gpio_set_level(DISPLAY_WR, 0);
-    vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS);  // TODO: Change to reasonable time
-    gpio_set_level(DISPLAY_CE, 0);
-    vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS);  // TODO: Change to reasonable time
     mcp23s17_write_to_reg(GPIOB, disp_data);
-    vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS);  // TODO: Change to reasonable time
+    gpio_set_level(DISPLAY_WR, 0);
+    ets_delay_us(1);
+    gpio_set_level(DISPLAY_CE, 0);
+    ets_delay_us(1);
     gpio_set_level(DISPLAY_CE, 1);
 }
 
@@ -336,19 +338,15 @@ void mcp23s17_init(void)
     data[0] = (char) (MCP_OPCODE | MCP_WRITE);
     /* Set all of the MCP23S17's PORTA (GPA) pins as output */
     mcp23s17_write_to_reg(IODIRA, 0x00);
-    vTaskDelay(10 / portTICK_RATE_MS);
 
 	/* Set all of the MCP23S17's PORTB (GPB) pins as output */
     mcp23s17_write_to_reg(IODIRB, 0x00);
-    vTaskDelay(10 / portTICK_RATE_MS);
 	
 	/* Reset output on port A */
     mcp23s17_write_to_reg(GPIOA, 0x00);
-    vTaskDelay(10 / portTICK_RATE_MS);
 	
 	/* Reset output on port B */
     mcp23s17_write_to_reg(GPIOB, 0x00);
-    vTaskDelay(10 / portTICK_RATE_MS);
 }
 
 /** @brief	Writes in to MCP23S17's register.
@@ -360,6 +358,7 @@ void mcp23s17_write_to_reg(char reg_addr, char val)
     data[1] = reg_addr;
     data[2] = val;
     ESP_ERROR_CHECK(spi_device_queue_trans(spi_handle, &trans_desc, portMAX_DELAY));
+    ets_delay_us(EXPANDER_WRITE_DELAY_US);
 }
 
 void app_main(void)
@@ -371,6 +370,6 @@ void app_main(void)
 
     xTaskCreatePinnedToCore(keyboard_driver, "keyboard_driver", 4096, NULL, 10, NULL, 1);
     xTaskCreatePinnedToCore(keyboard_press, "keyboard_press", 4096, NULL, 10, NULL, 1);
-    xTaskCreatePinnedToCore(display_driver, "display_driver", 4096, NULL, 10, NULL, 1);
+    xTaskCreatePinnedToCore(display_driver, "display_driver", 4096, NULL, 1, NULL, 1);
     // TODO: WiFi task;
 }
