@@ -38,6 +38,61 @@ static xQueueHandle col_isr_queue = NULL;
 spi_device_handle_t spi_handle;
 spi_transaction_t trans_desc;
 char data[3];
+// char **display_mem; // TODO: Is it even needed?
+char msg[13] = "Hello world!";
+int key_state = 0;  // TODO: implement key state switch in keyboard_press 
+// Normal
+const char key_map1[10][5] = {
+    {\x01, \x02, \x03, \x04, \x05},
+    {\x06, \x07, \x08, \x09, \x0a},
+    {\x0b, \x0c, \x0d, \x0e, \x0f},
+    {\x10, \x11, \x12, \x13, \x14},
+    {\x15, \x16, \x17, \x18, '^'},
+    {' ', ',', '(', ')', '/'},
+    {' ', '7', '8', '9', '*'},
+    {' ', '4', '5', '6', '-'},
+    {' ', '1', '2', '3', '+'},
+    {' ', '0', '.', '-',  \x00}
+};
+// TODO : 2nd
+const char key_map2[10][5] = {
+    {\x01, \x02, \x03, \x04, \x05},
+    {\x06, \x07, \x08, \x09, \x0a},
+    {\x0b, \x0c, \x0d, \x0e, \x0f},
+    {\x10, \x11, \x12, \x13, \x14},
+    {\x15, \x16, \x17, \x18, '^'},
+    {' ', ',', '(', ')', '/'},
+    {' ', '7', '8', '9', '*'},
+    {' ', '4', '5', '6', '-'},
+    {' ', '1', '2', '3', '+'},
+    {' ', '0', '.', '-',  \x00}
+};
+// Alpha
+const char key_mapa[10][5] = {
+    {\x01, \x02, \x03, \x04, \x05},
+    {\x06, \x07, \x08, \x09, \x0a},
+    {\x0b, \x0c, \x0d, \x0e, \x0f},
+    {'A', 'B', 'C', \x13, \x14},
+    {'D', 'E', 'F', 'G', 'H'},
+    {'I', 'J', 'K', 'L', 'M'},
+    {'N', 'O', 'P', 'Q', 'R'},
+    {'S', 'T', 'U', 'V', 'W'},
+    {'X', 'Y', 'Z', ' ', '"'},
+    {' ', ' ', ':', '?', ' '}
+};
+// TODO: Smol
+const char key_mapa[10][5] = {
+    {\x01, \x02, \x03, \x04, \x05},
+    {\x06, \x07, \x08, \x09, \x0a},
+    {\x0b, \x0c, \x0d, \x0e, \x0f},
+    {'a', 'b', 'c', \x13, \x14},
+    {'d', 'e', 'f', 'g', 'h'},
+    {'i', 'j', 'k', 'l', 'm'},
+    {'n', 'o', 'p', 'q', 'r'},
+    {'s', 't', 'u', 'v', 'w'},
+    {'x', 'y', 'z', ' ', '"'},
+    {' ', ' ', ':', '?', ' '}
+};
 
 void expander_spi_init(void);
 void mcp23s17_init(void);
@@ -51,6 +106,8 @@ void display_set_x(char x);
 void display_contrast(char contrast);
 void display_data(char disp_data);
 void display_instruction(char disp_instr);
+void display_clear(void);
+
 
 /** @brief	External interrupt handler.
  */
@@ -174,6 +231,7 @@ void keyboard_driver( void * pvParameters )
     }
 }
 
+// TODO: has to send char to memory. Find char in row x column map. 
 /** @brief	Task: Handles keyboard button press.
  */
 void keyboard_press(void * pvParameters){
@@ -341,6 +399,13 @@ void display_data(char disp_data)
     gpio_set_level(DISPLAY_CE, 0);
     ets_delay_us(1);
     gpio_set_level(DISPLAY_CE, 1);
+}
+
+/** @brief Clears display.
+ */
+void display_clear(void)
+{
+    // TODO
 }
 
 /** @brief	Initializes MCP23S17 by reseting and
