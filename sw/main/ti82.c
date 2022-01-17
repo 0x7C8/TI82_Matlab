@@ -29,7 +29,6 @@
 #include "mcp23s17.h"
 #include "pcb.h"
 
-#define DISPLAY_PERIOD  10 // (ms)
 #define EXPANDER_WRITE_DELAY_US 100 // TODO: Optimize this
 
 // static const char *TAG0 = "CORE0";
@@ -53,12 +52,13 @@ void display_contrast(char contrast);
 void display_data(char disp_data);
 void display_instruction(char disp_instr);
 
-// Pin interrupt (Keyboard)
+/** @brief	External interrupt handler.
+ */
 static void gpio_isr_handler(void* arg)
 {
     uint32_t gpio_num = (uint32_t) arg;
     xQueueSendFromISR(col_isr_queue, &gpio_num, NULL);
-    // Fixing bug for multiple presses by disabling interrupt temporary
+    // Fixing bug for multiple presses by temporary disabling interrupt
     gpio_intr_disable(KEYBOARD_COL0);
     gpio_intr_disable(KEYBOARD_COL1);
     gpio_intr_disable(KEYBOARD_COL2);
@@ -66,6 +66,8 @@ static void gpio_isr_handler(void* arg)
     gpio_intr_disable(KEYBOARD_COL4);
 }
 
+/** @brief	Initialize external interrupt GPIOs.
+ */
 void keyboard_isr_init(void)
 {
     gpio_config_t io_conf = {
@@ -84,6 +86,8 @@ void keyboard_isr_init(void)
     gpio_isr_handler_add(KEYBOARD_COL4, gpio_isr_handler, (void*) KEYBOARD_COL4);
 }
 
+/** @brief	Initialize communication with expander through SPI.
+ */
 void expander_spi_init(void)
 {
     ESP_LOGI(TAG1, "Setup Expander SPI.");
@@ -131,6 +135,9 @@ void expander_spi_init(void)
     ESP_LOGI(TAG1, "Done confgiguring Expander SPI.");
 }
 
+/** @brief	Task: Row shift register.
+ *  Only 1 row is active at the given moment.
+ */
 void keyboard_driver( void * pvParameters )
 {
     // Configure row output pins
@@ -163,10 +170,12 @@ void keyboard_driver( void * pvParameters )
             row = 0;
         else 
             row++;
-        vTaskDelay(DISPLAY_PERIOD / portTICK_RATE_MS); // TODO: adjust
+        vTaskDelay(10 / portTICK_RATE_MS);
     }
 }
 
+/** @brief	Task: Handles keyboard button press.
+ */
 void keyboard_press(void * pvParameters){
     ESP_LOGI(TAG1, "Start keyboard_press");
     uint32_t io_num;
@@ -209,6 +218,8 @@ void keyboard_press(void * pvParameters){
     }
 }
 
+/** @brief	Task: Display driver.
+ */
 void display_driver(void * pvParameters)
 {
     t6k04_init();
@@ -222,7 +233,7 @@ void display_driver(void * pvParameters)
     }
 }
 
-/** @brief	Initialise the display comminication.
+/** @brief	Initialize communication with display.
  */
 void t6k04_init(void)
 {
