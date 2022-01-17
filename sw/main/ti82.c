@@ -28,6 +28,7 @@
 
 #include "mcp23s17.h"
 #include "pcb.h"
+#include "ti82_fonts.h"
 
 #define EXPANDER_WRITE_DELAY_US 100 // TODO: Optimize this
 
@@ -38,11 +39,13 @@ static xQueueHandle col_isr_queue = NULL;
 spi_device_handle_t spi_handle;
 spi_transaction_t trans_desc;
 char data[3];
+char keyboard_row = 0;
+int display_res[2] = {96, 64};
 // char **display_mem; // TODO: Is it even needed?
 char msg[13] = "Hello world!";
 int key_state = 0;  // TODO: implement key state switch in keyboard_press 
 // Normal
-unsigned char key_map1[10][5] = {
+const unsigned char key_map1[10][5] = {
     {0x01, 0x02, 0x03, 0x04, 0x05},
     {0x06, 0x07, 0x08, 0x09, 0x0a},
     {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -55,7 +58,7 @@ unsigned char key_map1[10][5] = {
     {' ', '0', '.', '-', 0x00}
 };
 // TODO : 2nd
-unsigned char key_map2[10][5] = {
+const unsigned char key_map2[10][5] = {
     {0x01, 0x02, 0x03, 0x04, 0x05},
     {0x06, 0x07, 0x08, 0x09, 0x0a},
     {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -68,7 +71,7 @@ unsigned char key_map2[10][5] = {
     {' ', '0', '.', '-', 0x00}
 };
 // Alpha
-unsigned char key_mapa[10][5] = {
+const unsigned char key_mapa[10][5] = {
     {0x01, 0x02, 0x03, 0x04, 0x05},
     {0x06, 0x07, 0x08, 0x09, 0x0a},
     {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -81,7 +84,7 @@ unsigned char key_mapa[10][5] = {
     {' ', ' ', ':', '?', ' '}
 };
 // TODO: Smol
-const char key_mapsmol[10][5] = {
+const unsigned char key_mapsmol[10][5] = {
     {0x01, 0x02, 0x03, 0x04, 0x05},
     {0x06, 0x07, 0x08, 0x09, 0x0a},
     {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
@@ -98,6 +101,7 @@ void expander_spi_init(void);
 void mcp23s17_init(void);
 void mcp23s17_write_to_reg(char reg_addr, char val);
 void t6k04_init(void);
+void display_word(int letter_index, int letter_row);
 void display_onoff(char onoff);
 void display_counter(char xy, char updown);
 void display_set_y(char y);
@@ -207,26 +211,25 @@ void keyboard_driver( void * pvParameters )
     };
     gpio_config(&io_conf);
 
-    char row = 0;
     ESP_LOGI(TAG1, "Start keyboard_driver");
     while (true) {
-        if (row >= 2) {
+        if (keyboard_row >= 2) {
             gpio_set_level(KEYBOARD_ROW1, 0);
-            mcp23s17_write_to_reg(GPIOA, (char) (1 << (row-2)));
+            mcp23s17_write_to_reg(GPIOA, (char) (1 << (keyboard_row-2)));
         }
-        else if (row == 1) {
+        else if (keyboard_row == 1) {
             gpio_set_level(KEYBOARD_ROW0, 0);
             gpio_set_level(KEYBOARD_ROW1, 1);
         }
-        else if (row == 0) {
+        else if (keyboard_row == 0) {
             mcp23s17_write_to_reg(GPIOA, 0x00);
             gpio_set_level(KEYBOARD_ROW0, 1);
         }
         
-        if (row == 9)
-            row = 0;
+        if (keyboard_row == 9)
+            keyboard_row = 0;
         else 
-            row++;
+            keyboard_row++;
         vTaskDelay(10 / portTICK_RATE_MS);
     }
 }
@@ -282,13 +285,29 @@ void display_driver(void * pvParameters)
 {
     t6k04_init();
     char row = 4;
-    display_set_x(row);
     while(true)
     {
-        ESP_LOGI(TAG1, "LOL");
-        display_data(0xaa);
-        vTaskDelay(1000 / portTICK_RATE_MS);
+        int msg_size = strlen(msg);
+        for (int xad = 0; xad <= 7; xad++){
+            display_set_x(row+xad);
+            for(int page = 0; page <= msg_size; page++){
+                display_set_y(page);
+                display_word((int) msg[page], xad);
+            }
+            vTaskDelay(10 / portTICK_RATE_MS);
+        }
     }
+}
+// TODO: Test
+/** @brief	Convert 
+ */
+void display_word(int letter_index, int letter_row)
+{   
+    char word = 0x00;
+    for (int letter_col = 0; letter_col < 6; letter_col++){
+        word |= (((font[5*(letter_index-32)+letter_col] & (1 << letter_row)) > 0) ? 1 : 0) << (5-letter_col);
+    }
+    display_data(word);
 }
 
 /** @brief	Initialize communication with display.
@@ -310,7 +329,7 @@ void t6k04_init(void)
 
     // 86E:
     // Word Length: 8 bits = 1, 6 bits = 0
-    display_instruction((char) (1 << 0));
+    display_instruction((char) (0 << 0));
 
     display_counter(0, 1);
     display_set_z(0);
@@ -447,8 +466,8 @@ void app_main(void)
     keyboard_isr_init();
     col_isr_queue = xQueueCreate(10, sizeof(uint32_t));
 
-    xTaskCreatePinnedToCore(keyboard_driver, "keyboard_driver", 4096, NULL, 10, NULL, 1);
-    xTaskCreatePinnedToCore(keyboard_press, "keyboard_press", 4096, NULL, 10, NULL, 1);
-    xTaskCreatePinnedToCore(display_driver, "display_driver", 4096, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(keyboard_driver, "keyboard_driver", 4096, NULL, 2, NULL, 1);
+    xTaskCreatePinnedToCore(keyboard_press, "keyboard_press", 4096, NULL, 3, NULL, 1);
+    xTaskCreatePinnedToCore(display_driver, "display_driver", 4096, NULL, 10, NULL, 1);
     // TODO: WiFi task;
 }
