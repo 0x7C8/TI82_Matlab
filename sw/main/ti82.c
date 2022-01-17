@@ -284,18 +284,20 @@ void keyboard_press(void * pvParameters){
 void display_driver(void * pvParameters)
 {
     t6k04_init();
-    // display_clear();
+    display_clear();
     char row = 4;
     while(true)
     {
         int msg_size = strlen(msg);
+        display_contrast(54);
         for (int xad = 0; xad <= 7; xad++){
-            for(int page = 0; page <= msg_size; page++){
+            for(int page = 0; page <= msg_size-1; page++){
+                display_counter(1, 1);
                 display_set_x(row+xad);
+                display_counter(0, 1);
                 display_set_y(page);
                 display_word((int) msg[page], xad);
             }
-            vTaskDelay(10 / portTICK_RATE_MS);
         }
     }
 }
@@ -305,8 +307,8 @@ void display_driver(void * pvParameters)
 void display_word(int letter_index, int letter_row)
 {   
     char word = 0x00;
-    for (int letter_col = 0; letter_col < 6; letter_col++){
-        word |= (((font[5*(letter_index-32)+letter_col] & (1 << letter_row)) > 0) ? 1 : 0) << (5-letter_col);
+    for (int letter_col = 0; letter_col < 5; letter_col++){
+        word |= (((font[5*(letter_index-32)+letter_col] & (1 << letter_row)) > 0) ? 1 : 0) << (4-letter_col);
     }
     display_data(word);
 }
