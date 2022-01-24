@@ -29,6 +29,7 @@
 #include "mcp23s17.h"
 #include "pcb.h"
 #include "ti82_fonts.h"
+#include "keymap.h"
 
 #define EXPANDER_WRITE_DELAY_US 100 // TODO: Optimize this
 
@@ -38,76 +39,29 @@ static const char *TAG1 = "CORE1";
 static xQueueHandle col_isr_queue = NULL;
 spi_device_handle_t spi_handle;
 spi_transaction_t trans_desc;
-char data[3];
-char keyboard_row = 0;
+char data[3];   // Data that gets sent to Expander via PSI
+int keyboard_row, keyboard_col = 0;
 int display_res[2] = {96, 64};
-// char **display_mem; // TODO: Is it even needed?
-char msg[13] = "Hello world!";
-int key_state = 0;  // TODO: implement key state switch in keyboard_press 
-// Normal
-const unsigned char key_map1[10][5] = {
-    {0x01, 0x02, 0x03, 0x04, 0x05},
-    {0x06, 0x07, 0x08, 0x09, 0x0a},
-    {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
-    {0x10, 0x11, 0x12, 0x13, 0x14},
-    {0x15, 0x16, 0x17, 0x18, '^'},
-    {' ', ',', '(', ')', '/'},
-    {' ', '7', '8', '9', '*'},
-    {' ', '4', '5', '6', '-'},
-    {' ', '1', '2', '3', '+'},
-    {' ', '0', '.', '-', 0x00}
-};
-// TODO : 2nd
-const unsigned char key_map2[10][5] = {
-    {0x01, 0x02, 0x03, 0x04, 0x05},
-    {0x06, 0x07, 0x08, 0x09, 0x0a},
-    {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
-    {0x10, 0x11, 0x12, 0x13, 0x14},
-    {0x15, 0x16, 0x17, 0x18, '^'},
-    {' ', ',', '(', ')', '/'},
-    {' ', '7', '8', '9', '*'},
-    {' ', '4', '5', '6', '-'},
-    {' ', '1', '2', '3', '+'},
-    {' ', '0', '.', '-', 0x00}
-};
-// Alpha
-const unsigned char key_mapa[10][5] = {
-    {0x01, 0x02, 0x03, 0x04, 0x05},
-    {0x06, 0x07, 0x08, 0x09, 0x0a},
-    {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
-    {'A', 'B', 'C', 0x13, 0x14},
-    {'D', 'E', 'F', 'G', 'H'},
-    {'I', 'J', 'K', 'L', 'M'},
-    {'N', 'O', 'P', 'Q', 'R'},
-    {'S', 'T', 'U', 'V', 'W'},
-    {'X', 'Y', 'Z', ' ', '"'},
-    {' ', ' ', ':', '?', ' '}
-};
-// TODO: Smol
-const unsigned char key_mapsmol[10][5] = {
-    {0x01, 0x02, 0x03, 0x04, 0x05},
-    {0x06, 0x07, 0x08, 0x09, 0x0a},
-    {0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
-    {'a', 'b', 'c', 0x13, 0x14},
-    {'d', 'e', 'f', 'g', 'h'},
-    {'i', 'j', 'k', 'l', 'm'},
-    {'n', 'o', 'p', 'q', 'r'},
-    {'s', 't', 'u', 'v', 'w'},
-    {'x', 'y', 'z', ' ', '"'},
-    {' ', ' ', ':', '?', ' '}
-};
+char* msg;
+size_t msg_len;
+int key_state = 0;  // TODO: implement key state switch in keyboard_press
 
 void expander_spi_init(void);
 void mcp23s17_init(void);
 void mcp23s17_write_to_reg(char reg_addr, char val);
-void t6k04_init(void);
+void display_init(void);
 void display_word(int letter_index, int letter_row);
+// Display instructions
+void display_word_length(char word_length);
 void display_onoff(char onoff);
 void display_counter(char xy, char updown);
+void display_opamp_level(char level);
+void display_opamp_strength(char duty);
 void display_set_y(char y);
 void display_set_z(char z);
 void display_set_x(char x);
 void display_contrast(char contrast);
+
 void display_data(char disp_data);
 void display_instruction(char disp_instr);
 void display_clear(void);
@@ -212,25 +166,26 @@ void keyboard_driver( void * pvParameters )
     gpio_config(&io_conf);
 
     ESP_LOGI(TAG1, "Start keyboard_driver");
+    int row = 0;
     while (true) {
-        if (keyboard_row >= 2) {
+        if (row >= 2) {
             gpio_set_level(KEYBOARD_ROW1, 0);
-            mcp23s17_write_to_reg(GPIOA, (char) (1 << (keyboard_row-2)));
+            mcp23s17_write_to_reg(GPIOA, (char) (1 << (row-2)));
         }
-        else if (keyboard_row == 1) {
+        else if (row == 1) {
             gpio_set_level(KEYBOARD_ROW0, 0);
             gpio_set_level(KEYBOARD_ROW1, 1);
         }
-        else if (keyboard_row == 0) {
+        else if (row == 0) {
             mcp23s17_write_to_reg(GPIOA, 0x00);
             gpio_set_level(KEYBOARD_ROW0, 1);
         }
-        
-        if (keyboard_row == 9)
-            keyboard_row = 0;
-        else 
-            keyboard_row++;
+        keyboard_row = row;
         vTaskDelay(10 / portTICK_RATE_MS);
+        if (row == 9)
+            row = 0;
+        else 
+            row++;
     }
 }
 
@@ -241,54 +196,76 @@ void keyboard_press(void * pvParameters){
     ESP_LOGI(TAG1, "Start keyboard_press");
     uint32_t io_num;
     while (true) {
-        if(xQueueReceive(col_isr_queue, &io_num, portMAX_DELAY)) {
+        if (uxQueueMessagesWaiting(col_isr_queue) > 0) {
+            xQueueReceive(col_isr_queue, &io_num, portMAX_DELAY);
 
             switch((int) io_num)
             {
                 case KEYBOARD_COL0:
                     ESP_LOGI(TAG1, "COL0");
+                    keyboard_col = 0;
                     break;
 
                 case KEYBOARD_COL1:
                     ESP_LOGI(TAG1, "COL1");
+                    keyboard_col = 1;
                     break;
 
                 case KEYBOARD_COL2:
                     ESP_LOGI(TAG1, "COL2");
+                    keyboard_col = 2;
                     break;
 
                 case KEYBOARD_COL3:
                     ESP_LOGI(TAG1, "COL3");
+                    keyboard_col = 3;
                     break;
 
                 case KEYBOARD_COL4:
                     ESP_LOGI(TAG1, "COL4");
+                    keyboard_col = 4;
                     break;
 
                 default:
                     ESP_LOGI(TAG1, "Error: Column undefined.");
             }
+
+            msg_len++;
+            char *msg2;
+            msg2 = (char *)realloc(msg, msg_len*sizeof(char));
+            msg = msg2;
+            msg[msg_len-2] = keymap1[keyboard_row][keyboard_col];
+            msg[msg_len-1] = 0;
+
+            ESP_LOGI(TAG1, "msg = %s", msg);
+
             // Fixing bug for multiple presses by disabling interrupt temporary
-            vTaskDelay(10 / portTICK_RATE_MS);
+            vTaskDelay(100 / portTICK_RATE_MS);
             gpio_intr_enable(KEYBOARD_COL0);
             gpio_intr_enable(KEYBOARD_COL1);
             gpio_intr_enable(KEYBOARD_COL2);
             gpio_intr_enable(KEYBOARD_COL3);
             gpio_intr_enable(KEYBOARD_COL4);
         }
+        else {
+            vTaskDelay(10 / portTICK_RATE_MS);
+        }
     }
 }
+
+
 
 /** @brief	Task: Display driver.
  */
 void display_driver(void * pvParameters)
 {
-    t6k04_init();
+    ESP_LOGI(TAG1, "Starting display driver.");
+    display_init();
     display_clear();
     char row = 4;
     while(true)
     {
-        int msg_size = strlen(msg);
+        int msg_size = strlen(msg); // TODO: remove this
         display_contrast(54);
         for (int xad = 0; xad <= 7; xad++){
             for(int page = 0; page <= msg_size-1; page++){
@@ -299,10 +276,11 @@ void display_driver(void * pvParameters)
                 display_word((int) msg[page], xad);
             }
         }
+        vTaskDelay(100 / portTICK_RATE_MS); // Added to avoid triggering task watchdog
     }
 }
-// TODO: Test
-/** @brief	Convert 
+
+/** @brief	Convert part of a message to 6 bits bitmap and send to display
  */
 void display_word(int letter_index, int letter_row)
 {   
@@ -315,7 +293,7 @@ void display_word(int letter_index, int letter_row)
 
 /** @brief	Initialize communication with display.
  */
-void t6k04_init(void)
+void display_init(void)
 {
     // Configure display communication pins
     gpio_config_t io_conf = {
@@ -330,20 +308,21 @@ void t6k04_init(void)
     gpio_set_level(DISPLAY_RST, 1);
     gpio_set_level(DISPLAY_STB, 1);
 
-    // 86E:
-    // Word Length: 8 bits = 1, 6 bits = 0
-    display_instruction((char) (0 << 0));
-
+    display_word_length(0);
     display_counter(0, 1);
     display_set_z(0);
     display_onoff(1);
-
-    // OPA1 and OPA2:
-    // Op-amp Control 1 and 2
-    display_instruction((char) ((1 << 4) | (1 << 2) | (1 << 1) | (1 << 0)));
-    display_instruction((char) ((1 << 3) | (1 << 1) | (1 << 0)));
-    
+    display_opamp_level(7);
+    display_opamp_strength(3);
     display_contrast(54);
+}
+
+/** @brief	Word Length. (86E)
+ *	@param	word_length 8 bits = 1, 6 bits = 0
+ */
+void display_word_length(char word_length)
+{
+    display_instruction((char) (word_length << 0));
 }
 
 /** @brief	Turn on/off display. (DPE)
@@ -361,6 +340,22 @@ void display_onoff(char onoff)
 void display_counter(char xy, char updown)
 {
     display_instruction((char) ((1 << 2) | (xy << 1) | (updown << 0)));
+}
+
+/** @brief	Power supply level of opamp. (OPA1)
+ *	@param	level Range: 4 to 7
+ */
+void display_opamp_level(char level)
+{
+    display_instruction((char) ((1 << 4) | level));
+}
+
+/** @brief	Power supply strength of opamp. (OPA2)
+ *	@param	duty Range: 0 to 3
+ */
+void display_opamp_strength(char duty)
+{
+    display_instruction((char) ((1 << 3) | duty));
 }
 
 /** @brief	Set display's Y-address. (SYE)
@@ -472,6 +467,10 @@ void mcp23s17_write_to_reg(char reg_addr, char val)
 
 void app_main(void)
 {
+    msg_len = 2;
+    msg = (char *) malloc(msg_len);
+    snprintf(msg, msg_len, "_");
+
     expander_spi_init();
     mcp23s17_init();
     keyboard_isr_init();
